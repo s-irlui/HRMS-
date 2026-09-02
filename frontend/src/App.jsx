@@ -29,8 +29,8 @@ function Stat({ label, value, detail }) { return <article className="stat"><span
 
 function Shell({ view, setView }) {
   const { role, setRole, activeUserId, setActiveUserId, employees, notifications } = useStore();
-  const nav = ["Dashboard", "Employees", "Leave", "Attendance", "Departments", "Reports", "Audit"];
-  return <div className="app-shell"><aside className="sidebar"><div className="brand"><span>PP</span><div><strong>PulsePeople</strong><small>HRMS command center</small></div></div><nav>{nav.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => setView(item)}>{item}</button>)}</nav><div className="login-card"><label>Role</label><select value={role} onChange={(event) => setRole(event.target.value)}>{roles.map((item) => <option key={item}>{item}</option>)}</select><label>User</label><select value={activeUserId} onChange={(event) => setActiveUserId(Number(event.target.value))}>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></div></aside><main><header className="topbar"><div><p>Role aware workspace</p><h1>{view}</h1></div><div className="status-pill">{notifications.filter((note) => note.unread).length} unread alerts</div></header>{view === "Dashboard" && <Dashboard />}{view === "Employees" && <Employees />}{view === "Leave" && <Leave />}{view === "Attendance" && <Attendance />}{view === "Departments" && <Departments />}{view === "Reports" && <Reports />}{view === "Audit" && <Audit />}</main></div>;
+  const nav = ["Dashboard", "Profile", "Employees", "Leave", "Attendance", "Departments", "Reports", "Audit"];
+  return <div className="app-shell"><aside className="sidebar"><div className="brand"><span>PP</span><div><strong>PulsePeople</strong><small>HRMS command center</small></div></div><nav>{nav.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => setView(item)}>{item}</button>)}</nav><div className="login-card"><label>Role</label><select value={role} onChange={(event) => setRole(event.target.value)}>{roles.map((item) => <option key={item}>{item}</option>)}</select><label>User</label><select value={activeUserId} onChange={(event) => setActiveUserId(Number(event.target.value))}>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></div></aside><main><header className="topbar"><div><p>Role aware workspace</p><h1>{view}</h1></div><div className="status-pill">{notifications.filter((note) => note.unread).length} unread alerts</div></header>{view === "Dashboard" && <Dashboard />}{view === "Profile" && <Profile />}{view === "Employees" && <Employees />}{view === "Leave" && <Leave />}{view === "Attendance" && <Attendance />}{view === "Departments" && <Departments />}{view === "Reports" && <Reports />}{view === "Audit" && <Audit />}</main></div>;
 }
 
 function Dashboard() {
@@ -38,6 +38,16 @@ function Dashboard() {
   const pending = leave.filter((item) => item.status === "Pending").length;
   const present = attendance.filter((item) => item.date === "2026-09-02" && item.in).length;
   return <section className="grid dashboard-grid"><div className="hero-panel"><div><p>{role} dashboard</p><h2>Welcome back, {currentEmployee.name.split(" ")[0]}.</h2><span>Manage people data, approvals, attendance, and reporting from one responsive portal.</span></div></div><div className="stats-row"><Stat label="Headcount" value={scopeEmployees.length} detail="visible in your permission scope" /><Stat label="Pending leave" value={pending} detail="awaiting decision" /><Stat label="Clocked in" value={present} detail="today" /><Stat label="Leave balance" value={currentEmployee.leaveBalance} detail="days remaining" /></div><section className="panel"><h3>Live Notifications</h3>{notifications.map((note) => <div className="notification" key={note.id}><span>{note.text}</span><button onClick={() => setNotifications(notifications.map((item) => item.id === note.id ? { ...item, unread: false } : item))}>Mark read</button></div>)}</section><section className="panel"><h3>Today At A Glance</h3><div className="timeline">{attendance.slice(0, 4).map((record) => <div key={record.id}><b>{employeeName(record.employeeId, employees)}</b><span>{record.status} {record.in ? `from ${record.in}` : "not clocked"}</span></div>)}</div></section></section>;
+}
+function Profile() {
+  const { currentEmployee, employees, setEmployees, role, log } = useStore();
+  const [draft, setDraft] = useState({ phone: currentEmployee.phone || "", address: currentEmployee.address || "", emergency: currentEmployee.emergency || "" });
+  const save = (event) => {
+    event.preventDefault();
+    setEmployees(employees.map((employee) => employee.id === currentEmployee.id ? { ...employee, ...draft } : employee));
+    log(`Updated self-service profile for ${currentEmployee.name}`);
+  };
+  return <section className="split-layout"><div className="panel profile-panel"><h3>My Profile</h3><div className="profile-cover"><strong>{currentEmployee.name}</strong><span>{currentEmployee.title} / {currentEmployee.department}</span></div><div className="profile-grid"><span>Email</span><b>{currentEmployee.email}</b><span>Status</span><b>{currentEmployee.status}</b><span>Start date</span><b>{currentEmployee.startDate}</b><span>Leave balance</span><b>{currentEmployee.leaveBalance} days</b>{sensitiveRoles.has(role) && <><span>Salary</span><b>${currentEmployee.salary.toLocaleString()}</b><span>National ID</span><b>{currentEmployee.nationalId}</b></>}</div></div><form className="panel form-panel" onSubmit={save}><h3>Self-Service Updates</h3><input placeholder="Phone" value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} /><input placeholder="Address" value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} /><input placeholder="Emergency contact" value={draft.emergency} onChange={(e) => setDraft({ ...draft, emergency: e.target.value })} /><button>Save profile</button><small>Employees can update contact details only. HR/Admin manage employment fields.</small></form></section>;
 }
 function Employees() {
   const { role, employees, setEmployees, departments, log, scopeEmployees } = useStore();
@@ -99,3 +109,4 @@ export default function App() {
   const [view, setView] = useState("Dashboard");
   return <StoreProvider><Shell view={view} setView={setView} /></StoreProvider>;
 }
+

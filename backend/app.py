@@ -69,6 +69,13 @@ class AttendanceRecord(db.Model):
     status = db.Column(db.String(40), default="Present")
     employee = db.relationship("Employee")
 
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    message = db.Column(db.String(255), nullable=False)
+    read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     actor_id = db.Column(db.Integer)
@@ -78,6 +85,16 @@ class AuditLog(db.Model):
     detail = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+def scoped_employee_query(role, employee_id):
+    query = Employee.query.filter(Employee.deleted_at.is_(None))
+    if role == "Employee":
+        return query.filter(Employee.id == employee_id)
+    if role == "Manager":
+        return query.filter((Employee.manager_id == employee_id) | (Employee.id == employee_id))
+    return query
+
+def user_for_employee(employee_id):
+    return User.query.filter_by(employee_id=employee_id, active=True).first()
 def role_required(*roles):
     def outer(fn):
         @wraps(fn)
@@ -114,11 +131,37 @@ def create_app():
         token = create_access_token(identity=str(user.id), additional_claims={"role": user.role, "employee_id": user.employee_id, "user_id": user.id})
         return {"token": token, "user": {"id": user.id, "email": user.email, "role": user.role, "employeeId": user.employee_id}}
 
+    @app.get("/api/auth/me")
+    @jwt_required()
+    def auth_me():
+        user = User.query.get_or_404(int(get_jwt().get("sub")))
+        employee = Employee.query.get(user.employee_id)
+        return {"id": user.id, "email": user.email, "role": user.role, "active": user.active, "employee": employee.to_dict(include_sensitive=user.role in SENSITIVE_ROLES) if employee else None}
+
+    @app.get("/api/users")
+    @role_required("Admin")
+    def users_index():
+        users = User.query.order_by(User.email).all()
+        return jsonify([{"id": user.id, "email": user.email, "role": user.role, "active": user.active, "employeeId": user.employee_id} for user in users])
+
+    @app.patch("/api/users/<int:user_id>")
+    @role_required("Admin")
+    def users_update(user_id):
+        user = User.query.get_or_404(user_id)
+        body = request.get_json() or {}
+        for key in ["role", "active", "employee_id"]:
+            if key in body:
+                setattr(user, key, body[key])
+        if body.get("password"):
+            user.password_hash = generate_password_hash(body["password"])
+        audit("updated user account", "User", user.id, user.email)
+        db.session.commit()
+        return {"id": user.id, "email": user.email, "role": user.role, "active": user.active, "employeeId": user.employee_id}
     @app.get("/api/employees")
     @jwt_required()
     def employees_index():
         role = get_jwt().get("role")
-        items = Employee.query.filter(Employee.deleted_at.is_(None)).order_by(Employee.name).all()
+        items = scoped_employee_query(role, get_jwt().get("employee_id")).order_by(Employee.name).all()
         return jsonify([item.to_dict(include_sensitive=role in SENSITIVE_ROLES) for item in items])
 
     @app.post("/api/employees")
@@ -129,6 +172,23 @@ def create_app():
         db.session.add(employee); db.session.flush(); audit("created employee", "Employee", employee.id, employee.name); db.session.commit()
         return employee.to_dict(include_sensitive=True), 201
 
+    @app.patch("/api/employees/<int:employee_id>")
+    @jwt_required()
+    def employees_update(employee_id):
+        role = get_jwt().get("role")
+        employee = Employee.query.get_or_404(employee_id)
+        if role == "Manager":
+            return {"error": "Managers have read-only employee record access"}, 403
+        if role == "Employee" and employee_id != get_jwt().get("employee_id"):
+            return {"error": "Cannot edit another employee profile"}, 403
+        body = request.get_json() or {}
+        allowed = ["phone", "address", "emergency_contact"] if role == "Employee" else ["name", "email", "phone", "address", "emergency_contact", "department_id", "title", "manager_id", "status", "salary", "national_id", "leave_balance"]
+        for key in allowed:
+            if key in body:
+                setattr(employee, key, body[key])
+        audit("updated employee", "Employee", employee.id, employee.name)
+        db.session.commit()
+        return employee.to_dict(include_sensitive=role in SENSITIVE_ROLES)
     @app.delete("/api/employees/<int:employee_id>")
     @role_required("Admin", "HR Staff")
     def employees_delete(employee_id):
@@ -152,7 +212,15 @@ def create_app():
     @app.get("/api/leave")
     @jwt_required()
     def leave_index():
-        rows = LeaveRequest.query.order_by(LeaveRequest.created_at.desc()).all()
+        role = get_jwt().get("role")
+        employee_id = get_jwt().get("employee_id")
+        query = LeaveRequest.query
+        if role == "Employee":
+            query = query.filter(LeaveRequest.employee_id == employee_id)
+        elif role == "Manager":
+            ids = [employee.id for employee in scoped_employee_query(role, employee_id).all()]
+            query = query.filter(LeaveRequest.employee_id.in_(ids))
+        rows = query.order_by(LeaveRequest.created_at.desc()).all()
         return jsonify([{"id": r.id, "employeeId": r.employee_id, "employee": r.employee.name, "type": r.leave_type, "start": r.start_date.isoformat(), "end": r.end_date.isoformat(), "reason": r.reason, "status": r.status} for r in rows])
 
     @app.post("/api/leave")
@@ -160,13 +228,25 @@ def create_app():
     def leave_create():
         body = request.get_json() or {}
         row = LeaveRequest(employee_id=get_jwt().get("employee_id"), leave_type=body["type"], start_date=date.fromisoformat(body["start"]), end_date=date.fromisoformat(body["end"]), reason=body.get("reason", ""))
-        db.session.add(row); db.session.flush(); audit("submitted leave", "LeaveRequest", row.id); db.session.commit()
+        db.session.add(row); db.session.flush()
+        reviewer = User.query.filter(User.role.in_(["Admin", "HR Staff"])).first()
+        if reviewer:
+            db.session.add(Notification(user_id=reviewer.id, message=f"{row.employee.name} submitted {row.leave_type} leave."))
+        audit("submitted leave", "LeaveRequest", row.id); db.session.commit()
         return {"id": row.id, "status": row.status}, 201
 
     @app.patch("/api/leave/<int:request_id>")
     @role_required("Admin", "HR Staff", "Manager")
     def leave_decide(request_id):
-        row = LeaveRequest.query.get_or_404(request_id); row.status = (request.get_json() or {}).get("status", "Pending"); row.reviewer_id = get_jwt().get("user_id")
+        row = LeaveRequest.query.get_or_404(request_id)
+        role = get_jwt().get("role")
+        employee_id = get_jwt().get("employee_id")
+        if role == "Manager" and row.employee_id not in [employee.id for employee in scoped_employee_query(role, employee_id).all()]:
+            return {"error": "Cannot review leave outside your team"}, 403
+        row.status = (request.get_json() or {}).get("status", "Pending"); row.reviewer_id = get_jwt().get("user_id")
+        requestor = user_for_employee(row.employee_id)
+        if requestor:
+            db.session.add(Notification(user_id=requestor.id, message=f"Your {row.leave_type} leave was {row.status.lower()}."))
         audit(f"{row.status.lower()} leave", "LeaveRequest", row.id); db.session.commit()
         return {"id": row.id, "status": row.status}
 
@@ -185,7 +265,15 @@ def create_app():
     @app.get("/api/attendance")
     @jwt_required()
     def attendance_index():
-        rows = AttendanceRecord.query.order_by(AttendanceRecord.work_date.desc()).all()
+        role = get_jwt().get("role")
+        employee_id = get_jwt().get("employee_id")
+        query = AttendanceRecord.query
+        if role == "Employee":
+            query = query.filter(AttendanceRecord.employee_id == employee_id)
+        elif role == "Manager":
+            ids = [employee.id for employee in scoped_employee_query(role, employee_id).all()]
+            query = query.filter(AttendanceRecord.employee_id.in_(ids))
+        rows = query.order_by(AttendanceRecord.work_date.desc()).all()
         return jsonify([{"id": r.id, "employeeId": r.employee_id, "employee": r.employee.name, "date": r.work_date.isoformat(), "clockIn": r.clock_in.isoformat() if r.clock_in else None, "clockOut": r.clock_out.isoformat() if r.clock_out else None, "status": r.status} for r in rows])
 
     @app.get("/api/reports/<kind>.csv")
@@ -197,6 +285,21 @@ def create_app():
             rows = ["id,employee,date,clock_in,clock_out,status"] + [f"{r.id},{r.employee.name},{r.work_date},{r.clock_in},{r.clock_out},{r.status}" for r in AttendanceRecord.query.all()]
         return Response("\n".join(rows), mimetype="text/csv")
 
+    @app.get("/api/notifications")
+    @jwt_required()
+    def notifications_index():
+        rows = Notification.query.filter_by(user_id=get_jwt().get("user_id")).order_by(Notification.created_at.desc()).all()
+        return jsonify([{"id": row.id, "message": row.message, "read": row.read, "createdAt": row.created_at.isoformat()} for row in rows])
+
+    @app.patch("/api/notifications/<int:notification_id>")
+    @jwt_required()
+    def notifications_update(notification_id):
+        row = Notification.query.get_or_404(notification_id)
+        if row.user_id != get_jwt().get("user_id"):
+            return {"error": "Cannot update another user's notification"}, 403
+        row.read = bool((request.get_json() or {}).get("read", True))
+        db.session.commit()
+        return {"id": row.id, "read": row.read}
     @app.get("/api/audit")
     @role_required("Admin")
     def audit_index():
@@ -231,5 +334,8 @@ def seed():
         db.session.add(User(email=email, role=role, employee_id=employee_id, password_hash=generate_password_hash("password123")))
     db.session.add(LeaveRequest(employee_id=employees[2].id, leave_type="Annual", start_date=date.today() + timedelta(days=5), end_date=date.today() + timedelta(days=7), reason="Family travel"))
     db.session.add(AttendanceRecord(employee_id=employees[2].id, work_date=date.today(), clock_in=datetime.utcnow(), status="Present"))
+    db.session.add(Notification(user_id=4, message="Your annual leave request is waiting for manager review."))
     db.session.commit()
 app = create_app()
+
+
