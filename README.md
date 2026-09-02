@@ -47,3 +47,12 @@ flask --app app run --debug
 - feature/attendance-tracking
 - feature/reports-notifications
 - feature/mobile-polish
+
+## Docker Run
+
+```bash
+docker compose up --build
+```
+
+Frontend: http://localhost:5173
+Backend: http://localhost:5000/api/health
