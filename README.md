@@ -1,4 +1,4 @@
-﻿# PulsePeople HRMS
+# PulsePeople HRMS
 
 PulsePeople HRMS is a modern human resource management portal for small and medium-sized organizations. It centralizes employee records, leave approvals, attendance, reporting, notifications, and role-aware dashboards.
 

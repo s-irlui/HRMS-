@@ -1,4 +1,4 @@
-﻿# PulsePeople HRMS API
+# PulsePeople HRMS API
 
 Base URL: `/api`
 

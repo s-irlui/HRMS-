@@ -1,4 +1,4 @@
-﻿export const roles = ["Admin", "HR Staff", "Manager", "Employee"];
+export const roles = ["Admin", "HR Staff", "Manager", "Employee"];
 export const sensitiveRoles = new Set(["Admin", "HR Staff"]);
 export const uid = () => Math.random().toString(36).slice(2, 9);
 export const today = () => new Date().toISOString().slice(0, 10);

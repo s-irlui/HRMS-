@@ -1,4 +1,4 @@
-﻿# Final Project Output
+# Final Project Output
 
 Project name: PulsePeople HRMS
 Repository: https://github.com/s-irlui/HRMS-

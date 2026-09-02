@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useMemo, useState } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 import { initialAttendance, initialEmployees, initialLeave, roles, sensitiveRoles, timeNow, today, uid } from "./data";
 
 const Store = createContext(null);

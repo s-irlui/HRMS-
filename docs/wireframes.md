@@ -1,4 +1,4 @@
-﻿# Wireframe Notes
+# Wireframe Notes
 
 PulsePeople is a tool-first HR workspace, not a landing page.
 

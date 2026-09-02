@@ -1,4 +1,4 @@
-﻿from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from functools import wraps
 import os
 from dotenv import load_dotenv
