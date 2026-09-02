@@ -27,9 +27,15 @@ function StoreProvider({ children }) {
 
 function Stat({ label, value, detail }) { return <article className="stat"><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>; }
 
+function LoginScreen({ onLogin }) {
+  const { role, setRole, activeUserId, setActiveUserId, employees } = useStore();
+  return <main className="login-page"><section className="login-hero"><div><p>PulsePeople HRMS</p><h1>One calm place for people operations.</h1><span>Secure records, approvals, attendance, reporting, and self-service in a role-aware portal.</span></div></section><form className="login-box" onSubmit={(event) => { event.preventDefault(); onLogin(); }}><h2>Sign in</h2><label>Demo role</label><select value={role} onChange={(event) => setRole(event.target.value)}>{roles.map((item) => <option key={item}>{item}</option>)}</select><label>Demo user</label><select value={activeUserId} onChange={(event) => setActiveUserId(Number(event.target.value))}>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select><input value="password123" readOnly aria-label="Demo password" /><button>Enter workspace</button></form></main>;
+}
 function Shell({ view, setView }) {
   const { role, setRole, activeUserId, setActiveUserId, employees, notifications } = useStore();
+  const [authenticated, setAuthenticated] = useState(false);
   const nav = ["Dashboard", "Profile", "Employees", "Leave", "Attendance", "Departments", "Reports", "Audit"];
+  if (!authenticated) return <LoginScreen onLogin={() => setAuthenticated(true)} />;
   return <div className="app-shell"><aside className="sidebar"><div className="brand"><span>PP</span><div><strong>PulsePeople</strong><small>HRMS command center</small></div></div><nav>{nav.map((item) => <button key={item} className={view === item ? "active" : ""} onClick={() => setView(item)}>{item}</button>)}</nav><div className="login-card"><label>Role</label><select value={role} onChange={(event) => setRole(event.target.value)}>{roles.map((item) => <option key={item}>{item}</option>)}</select><label>User</label><select value={activeUserId} onChange={(event) => setActiveUserId(Number(event.target.value))}>{employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}</select></div></aside><main><header className="topbar"><div><p>Role aware workspace</p><h1>{view}</h1></div><div className="status-pill">{notifications.filter((note) => note.unread).length} unread alerts</div></header>{view === "Dashboard" && <Dashboard />}{view === "Profile" && <Profile />}{view === "Employees" && <Employees />}{view === "Leave" && <Leave />}{view === "Attendance" && <Attendance />}{view === "Departments" && <Departments />}{view === "Reports" && <Reports />}{view === "Audit" && <Audit />}</main></div>;
 }
 
@@ -68,12 +74,12 @@ function Employees() {
 }
 
 function Leave() {
-  const { role, currentEmployee, employees, leave, setLeave, setNotifications, notifications, log, scopeEmployees } = useStore();
+  const { role, currentEmployee, employees, setEmployees, leave, setLeave, setNotifications, notifications, log, scopeEmployees } = useStore();
   const [draft, setDraft] = useState({ type: "Annual", start: today(), end: today(), reason: "" });
   const allowedIds = new Set(scopeEmployees.map((employee) => employee.id));
   const visible = ["Admin", "HR Staff"].includes(role) ? leave : role === "Manager" ? leave.filter((item) => allowedIds.has(item.employeeId)) : leave.filter((item) => item.employeeId === currentEmployee.id);
   const submit = (event) => { event.preventDefault(); const next = { ...draft, id: Date.now(), employeeId: currentEmployee.id, status: "Pending" }; setLeave([next, ...leave]); setNotifications([{ id: uid(), text: `${currentEmployee.name} submitted ${draft.type} leave.`, unread: true }, ...notifications]); log(`Submitted leave request #${next.id}`); };
-  const decide = (id, status) => { const request = leave.find((item) => item.id === id); setLeave(leave.map((item) => item.id === id ? { ...item, status } : item)); setNotifications([{ id: uid(), text: `${employeeName(request.employeeId, employees)} leave ${status.toLowerCase()}.`, unread: true }, ...notifications]); log(`${status} leave request #${id}`); };
+  const decide = (id, status) => { const request = leave.find((item) => item.id === id); setLeave(leave.map((item) => item.id === id ? { ...item, status } : item)); if (status === "Approved") { const days = Math.max(1, Math.round((new Date(request.end) - new Date(request.start)) / 86400000) + 1); setEmployees(employees.map((employee) => employee.id === request.employeeId ? { ...employee, leaveBalance: Math.max(0, employee.leaveBalance - days) } : employee)); } setNotifications([{ id: uid(), text: `${employeeName(request.employeeId, employees)} leave ${status.toLowerCase()}.`, unread: true }, ...notifications]); log(`${status} leave request #${id}`); };
   return <section className="split-layout"><form className="panel form-panel" onSubmit={submit}><h3>Request Leave</h3><select value={draft.type} onChange={(e) => setDraft({ ...draft, type: e.target.value })}><option>Annual</option><option>Sick</option><option>Study</option><option>Unpaid</option></select><input type="date" value={draft.start} onChange={(e) => setDraft({ ...draft, start: e.target.value })} /><input type="date" value={draft.end} onChange={(e) => setDraft({ ...draft, end: e.target.value })} /><textarea placeholder="Reason" value={draft.reason} onChange={(e) => setDraft({ ...draft, reason: e.target.value })} /><button>Submit request</button></form><div className="panel"><h3>Approval Queue</h3><div className="cards-list">{visible.map((item) => <article className="mini-card" key={item.id}><div><strong>{employeeName(item.employeeId, employees)}</strong><span>{item.type}: {item.start} to {item.end}</span><small>{item.reason}</small></div><b className={`state ${item.status.toLowerCase()}`}>{item.status}</b>{item.status === "Pending" && role !== "Employee" && <div className="actions"><button onClick={() => decide(item.id, "Approved")}>Approve</button><button onClick={() => decide(item.id, "Rejected")}>Reject</button></div>}</article>)}</div></div></section>;
 }
 
@@ -109,4 +115,5 @@ export default function App() {
   const [view, setView] = useState("Dashboard");
   return <StoreProvider><Shell view={view} setView={setView} /></StoreProvider>;
 }
+
 

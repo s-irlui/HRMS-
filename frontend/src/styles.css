@@ -65,3 +65,11 @@ th { color: var(--muted); font-size: .82rem; }
 .profile-grid { display: grid; grid-template-columns: 140px 1fr; gap: .7rem 1rem; }
 .profile-grid span { color: var(--muted); }
 .profile-grid b { overflow-wrap: anywhere; }
+.login-page { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); background: linear-gradient(90deg, rgba(21,32,43,.86), rgba(14,124,123,.42)), url("https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1800&q=80") center/cover; }
+.login-hero { color: white; padding: clamp(2rem, 7vw, 6rem); display: flex; align-items: end; }
+.login-hero p { margin: 0 0 .7rem; color: #d8f1ef; font-weight: 800; text-transform: uppercase; }
+.login-hero span { display: block; max-width: 720px; margin-top: 1rem; color: #eef8f6; font-size: 1.08rem; }
+.login-box { align-self: center; justify-self: center; width: min(420px, calc(100% - 2rem)); background: rgba(255,255,255,.96); border: 1px solid var(--line); border-radius: 8px; padding: 1.2rem; display: grid; gap: .75rem; box-shadow: 0 24px 70px rgba(0,0,0,.24); }
+.login-box h2 { font-size: 1.5rem; }
+.login-box label { color: var(--muted); font-size: .85rem; font-weight: 700; }
+@media (max-width: 820px) { .login-page { grid-template-columns: 1fr; } .login-hero { min-height: 44vh; } .login-box { margin: 1rem auto 2rem; } }

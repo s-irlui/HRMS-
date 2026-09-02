@@ -247,6 +247,9 @@ def create_app():
         requestor = user_for_employee(row.employee_id)
         if requestor:
             db.session.add(Notification(user_id=requestor.id, message=f"Your {row.leave_type} leave was {row.status.lower()}."))
+        if row.status == "Approved":
+            days = (row.end_date - row.start_date).days + 1
+            row.employee.leave_balance = max(0, row.employee.leave_balance - days)
         audit(f"{row.status.lower()} leave", "LeaveRequest", row.id); db.session.commit()
         return {"id": row.id, "status": row.status}
 
@@ -279,10 +282,21 @@ def create_app():
     @app.get("/api/reports/<kind>.csv")
     @role_required("Admin", "HR Staff", "Manager")
     def reports_csv(kind):
+        role = get_jwt().get("role")
+        employee_id = get_jwt().get("employee_id")
+        allowed_ids = None
+        if role == "Manager":
+            allowed_ids = [employee.id for employee in scoped_employee_query(role, employee_id).all()]
         if kind == "leave":
-            rows = ["id,employee,type,start,end,status"] + [f"{r.id},{r.employee.name},{r.leave_type},{r.start_date},{r.end_date},{r.status}" for r in LeaveRequest.query.all()]
+            query = LeaveRequest.query
+            if allowed_ids is not None:
+                query = query.filter(LeaveRequest.employee_id.in_(allowed_ids))
+            rows = ["id,employee,type,start,end,status"] + [f"{r.id},{r.employee.name},{r.leave_type},{r.start_date},{r.end_date},{r.status}" for r in query.all()]
         else:
-            rows = ["id,employee,date,clock_in,clock_out,status"] + [f"{r.id},{r.employee.name},{r.work_date},{r.clock_in},{r.clock_out},{r.status}" for r in AttendanceRecord.query.all()]
+            query = AttendanceRecord.query
+            if allowed_ids is not None:
+                query = query.filter(AttendanceRecord.employee_id.in_(allowed_ids))
+            rows = ["id,employee,date,clock_in,clock_out,status"] + [f"{r.id},{r.employee.name},{r.work_date},{r.clock_in},{r.clock_out},{r.status}" for r in query.all()]
         return Response("\n".join(rows), mimetype="text/csv")
 
     @app.get("/api/notifications")
@@ -337,5 +351,7 @@ def seed():
     db.session.add(Notification(user_id=4, message="Your annual leave request is waiting for manager review."))
     db.session.commit()
 app = create_app()
+
+
 
 

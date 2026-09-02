@@ -56,3 +56,16 @@ docker compose up --build
 
 Frontend: http://localhost:5173
 Backend: http://localhost:5000/api/health
+
+## Delivered Features
+
+- Demo login screen for Admin, HR Staff, Manager, and Employee sessions.
+- Role-aware navigation and dashboards.
+- Employee onboarding, search, sensitive-field protection, and soft archive.
+- Self-service profile page for contact updates.
+- Leave request submission, manager/HR approval, rejection, notifications, and balance updates.
+- Attendance clock in/out and scoped attendance tables.
+- Department configuration for Admin.
+- Leave and attendance CSV reports with manager scoping.
+- Admin audit log for write operations.
+- Docker Compose setup for PostgreSQL, Flask API, and React frontend.
